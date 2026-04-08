@@ -443,3 +443,267 @@ Before proceeding to implementation, I recommend confirming:
 4. **`oletools` Risk Mitigation:** Given the maintenance concern, do you approve wrapping `oletools` behind a `MacroAnalyzer` interface so we can swap in `oledump.py` or a community fork without changing tool APIs?
 
 5. **Audit Trail:** Is the `.excel_agent_audit.jsonl` file (appended on every destructive operation) acceptable, or should auditing be pluggable (file, database, webhook)?
+
+---
+
+# Phase 1: ANALYZE — Deep Multi-Dimensional Research & Validation
+
+I'll conduct rigorous, independent research across every critical axis of this blueprint to validate claims, surface risks, and identify enhancements the draft may have missed. Let me begin.---
+
+# Comprehensive Blueprint Validation Report
+
+## Executive Summary
+
+I have conducted independent research across all critical axes of your enhanced design blueprint. Below is a structured, multi-dimensional validation — confirming what is sound, challenging what needs refinement, and proposing targeted enhancements you haven't yet considered. My findings span **6 research axes** with **14 actionable findings**.
+
+---
+
+## I. Research Axis 1: Core Library — `openpyxl`
+
+### ✅ VALIDATED
+
+The latest available version on PyPI is openpyxl 3.1.5. The blueprint's choice is confirmed as correct.
+
+openpyxl is a Python library to read/write Excel 2010 xlsx/xlsm/xltx/xltm files. It was born from lack of existing library to read/write natively from Python the Office Open XML format. This confirms full headless operation without Excel installed — essential for your AI-agent environment.
+
+### ⚠️ CRITICAL SECURITY CONFIRMATION
+
+By default openpyxl does not guard against quadratic blowup or billion laughs xml attacks. To guard against these attacks install defusedxml. Your blueprint correctly flags `defusedxml` as **mandatory**. This is validated.
+
+### 🔶 NEW CONCERN: Python Version Support
+
+The official docs state support for Python 3.6, 3.7, 3.8 and 3.9. However, Python 3.9 is already EOL (October 2025), and the recommendation is to plan migration to 3.12+ (or 3.14 for latest features). openpyxl's documentation appears stale on this front, while the package itself still works on modern Python. **Recommendation:** Pin your project to **Python ≥3.11** to align with Python 3.14.0, which was released with free-threaded builds moving from experimental to officially supported, and features including t-strings (PEP 750), deferred annotations (PEP 649), and sub-interpreters (PEP 734). This gives you access to modern features while maintaining compatibility with openpyxl. Use `3.12` as the floor.
+
+---
+
+## II. Research Axis 2: Macro Safety — `oletools`
+
+### ✅ VALIDATED: Upgrade from `olefile` to `oletools` is Correct
+
+oletools is a package of python tools to analyze Microsoft OLE2 files, mainly for malware analysis, forensics and debugging. It is based on the olefile parser. It also provides tools to analyze RTF files and files based on the OpenXML format such as MS Office 2007+ documents. oletools can detect, extract and analyse VBA macros, OLE objects, Excel 4 macros (XLM) and DDE links.
+
+The toolset includes exactly what the blueprint's `MacroHandler` needs: olevba extracts and analyzes VBA Macro source code from MS Office documents (OLE and OpenXML).
+
+### ✅ VALIDATED: Industry Adoption Confirms Maturity
+
+oletools are used by a number of projects and online malware analysis services, including ACE, ADAPT, CAPE, CinCan, Cortex XSOAR (Palo Alto), Cuckoo Sandbox, FAME, Hybrid-analysis.com, InQuest Labs, IntelOwl, Joe Sandbox, Laika BOSS, MalwareBazaar, REMnux, Splunk add-on for MS O365 Email, Strelka, TheHive/Cortex, Viper, and probably VirusTotal. This is an extraordinary level of real-world validation for security tooling.
+
+### ⚠️ CONFIRMED RISK: Maintenance Status
+
+Further analysis of the maintenance status of oletools based on released PyPI versions cadence determined that its maintenance is Inactive. An important project maintenance signal is that it hasn't seen any new versions released to PyPI in the past 12 months, and could be considered as a discontinued project.
+
+However: The python package oletools was scanned for known vulnerabilities and missing license, and no issues were found. Thus the package was deemed as safe to use.
+
+The latest PyPI release is oletools version 0.60.2. The recommended Python version to run oletools is the latest Python 3.x (3.12 for now).
+
+**Verdict:** The blueprint's decision to wrap `oletools` behind a `MacroAnalyzer` abstraction interface is **validated and essential**. The library is functionally sound and deeply battle-tested, but the maintenance gap creates bus-factor risk. The abstraction layer is the correct mitigation.
+
+---
+
+## III. Research Axis 3: Formula Calculation Engine — Tiered Architecture
+
+### ✅ VALIDATED: `formulas` Library is the Strongest Tier 1 Candidate
+
+formulas implements an interpreter for Excel formulas, which parses and compile Excel formulas expressions. Moreover, it compiles Excel workbooks to python and executes without using the Excel COM server. Hence, Excel is not needed.
+
+Critically, it is **actively maintained**: The latest version is 1.3.4, released Mar 11, 2026, with the previous version 1.3.3 released Nov 4, 2025. This is a significant advantage over `pycel`.
+
+The library offers exactly what the blueprint needs for dependency graph construction: It can plot the dependency graph that depicts relationships between Excel cells. And it supports circular references when you add `circular=True` to the finish method.
+
+The CLI capabilities are a bonus for agent tool chaining: The formulas command-line interface works with spreadsheet models and accepts .xlsx, .ods, and .json inputs. A typical workflow starts by calculating a workbook. You can override input values directly from the command line and request specific cells to be rendered in the output.
+
+Additionally, spreadsheet models can also be converted into a portable JSON representation, which is useful when the model needs to be versioned, inspected, or executed without the original workbook. This aligns perfectly with the blueprint's JSON-first philosophy.
+
+### 🔶 IMPORTANT NUANCE: `pycel` vs `formulas`
+
+Pycel can translate an Excel spreadsheet into executable python code which can be run independently of Excel. The python code is based on a graph and uses caching & lazy evaluation to ensure (relatively) fast execution.
+
+Performance claim validated: Tested extensively on spreadsheets with 10 sheets & more than 10000 formulae. In that case calculation of the equations takes about 50ms and agrees with Excel up to 5 decimal places.
+
+However, pycel has a critical limitation for headless environments. The *original* pycel fork requires an instance of Excel for initial compilation (i.e., the compilation needs to be run on Windows). The `stephenrauch` fork modernized this with a tokenizer of similar origin from the openpyxl library, removing the COM dependency. But the latest PyPI release is pycel-1.0b30 — still a beta.
+
+**Architecture Decision Reinforcement:** The blueprint should specify:
+- **Tier 1 PRIMARY: `formulas` 1.3.4** — Production-stable, actively maintained (release within last month), dependency graph built-in, CLI, JSON model export, circular reference support.
+- **Tier 1 SECONDARY (optional): `pycel` via `stephenrauch` fork** — Useful for fast graph-based caching, but beta-quality. Wrap behind the same calculation interface.
+- **Tier 2: LibreOffice Headless** — Full fidelity fallback, unchanged from draft.
+
+### 🔶 CONSIDERATION: `xlcalculator` as Reference
+
+xlcalculator is a Python library that reads MS Excel files and can translate the Excel functions into Python code and subsequently evaluate them. Essentially doing the Excel calculations without the need for Excel. xlcalculator is a modernization of the koala2 library.
+
+It has a notable modern AST approach: Reimplemented evaluation engine to not generate Python code anymore, but build a proper AST from the AST nodes. Each AST node supports an eval() function that knows how to compute a result. This removes a lot of complexities around determining the evaluation context at code creation time.
+
+However, it acknowledges a fundamental precision limitation: Further work will be required to keep numbers in-line with Excel throughout different transformations. This requires a low-level implementation of a numeric datatype (C or C++, Cython?) to replicate its behaviour. Python built-in numeric types don't replicate behaviours appropriately.
+
+**Verdict:** Keep `xlcalculator` as reference material for AST design patterns, but do not add it as a runtime dependency. `formulas` is superior in maturity, maintenance, and feature coverage.
+
+---
+
+## IV. Research Axis 4: Governance Token Architecture — HMAC-SHA256
+
+### ✅ VALIDATED: HMAC-SHA256 is Industry Standard for Agent Tool Gating
+
+While new authentication standards like OAuth 2.1 and JWT dominate headlines, HMAC (Hash-based Message Authentication Code) remains the most practical, efficient, and reliable way to verify message integrity between trusted systems.
+
+HMAC is a cryptographic method that uses a secret key and a hashing algorithm (like SHA256) to verify that the message hasn't been changed in transit, and the message came from a trusted sender that knows the shared secret.
+
+The blueprint's choice is validated by current agent framework implementations. Production AI agent platforms are using exactly this pattern: AES-256-GCM at rest, HMAC-hashed access tokens with per-agent and per-fleet permissioning — each agent or group gets its own token with scoped access.
+
+### 🔶 ENHANCEMENT: Add TTL, Nonce, and Timestamp
+
+Current agent approval frameworks implement stronger patterns than the blueprint specifies. Challenge/response (nonce + HMAC token + request hash) + short TTL is the standard. The phantom token pattern implements: Each proxied request gets a UUID v4 request ID and an HMAC-SHA256 signature computed over a canonical string. The server verifies signatures on ingestion with constant-time comparison, rejects stale timestamps (more than 5 minutes in the future, more than 24 hours in the past).
+
+Best practices per current security guidance: Include a timestamp in signed messages. This prevents replay attacks — attackers can't reuse old requests. And critically: Use constant-time comparison. In Python, use hmac.compare_digest.
+
+**Enhancement to the `ApprovalTokenMgr` spec:**
+
+```python
+@dataclass
+class ApprovalToken:
+    scope: str              # e.g., "sheet:delete"
+    target_file_hash: str   # SHA-256 of target workbook
+    nonce: str              # UUID4, one-time use
+    issued_at: float        # Unix timestamp
+    ttl_seconds: int        # Default: 300 (5 min)
+    signature: str          # HMAC-SHA256(secret, scope|hash|nonce|issued_at|ttl)
+```
+
+The token MUST be:
+1. **Scoped** to a specific file hash (prevents reuse across workbooks)
+2. **Time-limited** with TTL (prevents replay attacks)
+3. **Single-use** via nonce tracking (prevents re-submission)
+4. **Validated with `hmac.compare_digest()`** (prevents timing attacks)
+
+This is a significant upgrade over the blueprint's current unspecified token internals.
+
+---
+
+## V. Research Axis 5: Python Ecosystem Context (2026)
+
+### 🔶 NEW FINDING: Supply Chain Security
+
+Python 3.14 ships with Sigstore-only signing (PEP 761) replacing PGP and includes SBOMs. Python ecosystem modernizing supply-chain security. PyPI continuing malware detection improvements.
+
+The recent PyPI attack is relevant context: PyPI cloud token malware campaign disclosed. 20 packages masquerading as time utilities stole AWS, Alibaba Cloud, and Tencent Cloud credentials. 14,100+ downloads before removal.
+
+**Recommendation:** The `excel-agent-tools` project should:
+1. Pin all dependency versions with hashes in `requirements.txt`
+2. Publish with Sigstore attestations
+3. Include SBOM generation in the build pipeline
+
+### 🔶 NEW FINDING: Python 3.14 Template Strings (PEP 750)
+
+Steering Council approves PEP 750 (template strings). New t"..." syntax enables custom processing of interpolated strings for safer SQL, HTML, and DSL generation.
+
+This could be relevant for the formula string construction tools (`xls_set_formula.py`), where injection of malicious formula content is a real risk. Template strings would allow **structured formula building** that prevents injection. Mark this as a Phase 10 enhancement opportunity.
+
+---
+
+## VI. Research Axis 6: Agent Approval Pattern Validation
+
+### ✅ VALIDATED: Denial-with-guidance Pattern
+
+Modern agent approval frameworks implement a pattern directly relevant to the blueprint's impact report system: When an async exec approval is denied, the platform prevents the agent from reusing output from any earlier run of the same command in the session. The denial reason is passed with explicit guidance that no command output is available, which stops the agent from claiming there is new output or repeating the denied command.
+
+**Recommendation:** When `xls_delete_rows.py` returns `exit_code=1` due to broken references, the JSON response should include **prescriptive guidance** that the agent cannot ignore:
+
+```json
+{
+    "status": "denied",
+    "exit_code": 1,
+    "denial_reason": "Operation would break 7 formula references across 3 sheets",
+    "guidance": "Run xls_update_references.py --target='Sheet1!A5:A10' before retrying",
+    "stale_output_warning": "Do not proceed with cached data from prior reads of affected cells"
+}
+```
+
+---
+
+## VII. Consolidated Findings Matrix
+
+| # | Finding | Category | Severity | Blueprint Status | Action Required |
+|---|:---|:---|:---|:---|:---|
+| 1 | openpyxl 3.1.5 confirmed correct | Core I/O | — | ✅ Validated | None |
+| 2 | `defusedxml` mandatory | Security | Critical | ✅ Validated | None |
+| 3 | Python version floor should be ≥3.12 | Platform | Medium | 🔶 Missing | Add to blueprint |
+| 4 | `oletools` upgrade from `olefile` correct | Macro Safety | High | ✅ Validated | None |
+| 5 | `oletools` maintenance risk confirmed | Dependency | Medium | ✅ Mitigated by abstraction | Proceed as designed |
+| 6 | `formulas` 1.3.4 is best Tier 1 engine | Calculation | High | ✅ Validated | Promote over `pycel` |
+| 7 | `pycel` is beta (1.0b30), use cautiously | Calculation | Medium | 🔶 Needs clarification | Demote to optional |
+| 8 | `formulas` JSON model export aligns with JSON-first | Architecture | Medium | ✅ Bonus capability | Leverage in tools |
+| 9 | `xlcalculator` AST pattern useful as reference only | Calculation | Low | ✅ Correctly excluded | No runtime dependency |
+| 10 | HMAC-SHA256 validated for agent tool gating | Security | High | ✅ Validated | None |
+| 11 | Token needs TTL + nonce + timestamp + constant-time compare | Security | **Critical** | 🔶 Underspecified | Enhance token spec |
+| 12 | Supply chain security (Sigstore, SBOM, pinned hashes) | Security | Medium | 🔶 Missing | Add to Phase 9 |
+| 13 | PEP 750 template strings for formula injection prevention | Security | Low | 🔶 Future opportunity | Phase 10 enhancement |
+| 14 | Denial-with-prescriptive-guidance in impact reports | Agent UX | Medium | 🔶 Underspecified | Enhance JSON schema |
+
+---
+
+## VIII. Answers to Your 5 Validation Questions
+
+### Q1: Macro Handling — Read-only/container management + `xls_inject_vba_project.py`?
+
+**Approved with one constraint.** The approach is validated by research — VBA binary containers are opaque OLE structures that cannot be feasibly constructed from scratch. The XlsxWriter pattern (extract `.bin`, re-inject) is the only safe approach. oletools can detect, extract and analyse VBA macros, OLE objects, Excel 4 macros (XLM) and DDE links — but note that injection MUST be preceded by a `scan_risk()` call on the `.bin` being injected. **Never inject an unscanned macro binary.** Add this as a hard pre-condition in the tool's execution flow.
+
+### Q2: Two-Tier Calculation — Accept the tiered approach?
+
+**Approved with a hierarchy clarification.** Based on research, the tier should be:
+- **Tier 1 PRIMARY: `formulas` 1.3.4** — Released March 2026, production-stable, with workbook compilation to Python and execution without Excel COM server. Excel is not needed.
+- **Tier 1 SECONDARY (optional): `pycel`** — Still at beta version 1.0b30. Useful for graph caching but should be an opt-in dependency behind a feature flag.
+- **Tier 2: LibreOffice Headless** — Unchanged. Invoked when `formulas` encounters an unsupported function or when the user explicitly requests full-fidelity recalc.
+
+### Q3: Token Scopes — Are 7 sufficient, or should `chart:delete` and `table:delete` also require tokens?
+
+**7 is sufficient for v1.0.0, but enhance the token specification.** `chart:delete` and `table:delete` are non-destructive to formula integrity (they don't break cell references), so they don't warrant governance tokens in v1.0. However, the token itself needs the enhanced specification from Finding #11: TTL, nonce, target file hash binding, and `hmac.compare_digest()` validation — include a timestamp to prevent replay attacks, and use constant-time comparison — in Python, use hmac.compare_digest.
+
+### Q4: `oletools` Risk Mitigation — Approve `MacroAnalyzer` abstraction?
+
+**Strongly approved.** The maintenance status is Inactive and it hasn't seen any new versions in the past 12 months. Yet it is used by Cortex XSOAR (Palo Alto), Cuckoo Sandbox, Joe Sandbox, REMnux, Splunk, TheHive/Cortex, and many others. This creates a paradox: battle-tested but dormant. The abstraction layer is the correct architectural hedge. Define the interface as:
+
+```python
+class MacroAnalyzer(Protocol):
+    def has_macros(self, path: Path) -> bool: ...
+    def extract_modules(self, path: Path) -> list[MacroModule]: ...
+    def detect_auto_exec(self, path: Path) -> list[AutoExecTrigger]: ...
+    def detect_suspicious(self, path: Path) -> list[SuspiciousKeyword]: ...
+    def scan_risk(self, path: Path) -> RiskReport: ...
+```
+
+The `OletoolsMacroAnalyzer` implements this today. If a maintained fork appears, swap the implementation — zero tool API changes.
+
+### Q5: Audit Trail — `.excel_agent_audit.jsonl` acceptable, or should auditing be pluggable?
+
+**Make it pluggable from day one, with `.jsonl` as the default backend.** The research shows that production agent frameworks consistently implement auditing where every secret access, every API call, every auth attempt is logged with actor, timestamp, and IP. The phantom token pattern also emphasizes every individual API call being independently auditable — if you need to investigate what happened at 14:23:07 UTC, you have a signed record.
+
+Design the audit layer as:
+
+```python
+class AuditBackend(Protocol):
+    def log_event(self, event: AuditEvent) -> None: ...
+
+class JsonlAuditBackend(AuditBackend):
+    """Default: append to .excel_agent_audit.jsonl"""
+
+class WebhookAuditBackend(AuditBackend):
+    """Optional: POST to configurable endpoint"""
+
+class CompositeAuditBackend(AuditBackend):
+    """Fan-out to multiple backends simultaneously"""
+```
+
+This adds ~2 hours to Phase 8, but prevents painful retrofitting when enterprise users need webhook/SIEM integration.
+
+---
+
+## IX. Final Recommendation
+
+**The blueprint is architecturally sound and research-validated.** The 14 findings above are refinements, not rewrites. The most critical actions before proceeding to implementation are:
+
+1. **Pin Python ≥3.12** as minimum version
+2. **Enhance the `ApprovalToken` specification** with TTL + nonce + file hash binding + constant-time comparison
+3. **Promote `formulas` to sole Tier 1 engine**, demote `pycel` to optional
+4. **Add denial-with-prescriptive-guidance** to the JSON response schema for all governance-gated tools
+5. **Make the audit backend pluggable** from day one
+
+**I recommend proceeding to Phase 3 (VALIDATE) — explicit confirmation from you on these 5 adjustments — then moving directly to implementation.**
