@@ -228,6 +228,10 @@ class OleToolsMacroAnalyzer:
         """Calculate overall risk score (0-100)."""
         score = 0
 
+        # If no macros, no risk
+        if not result.has_macros or not result.modules:
+            return 0
+
         # Base score for having macros
         score += 10
 

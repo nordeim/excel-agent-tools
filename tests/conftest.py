@@ -237,3 +237,54 @@ def output_dir(tmp_path: Path) -> Path:
     d = tmp_path / "output"
     d.mkdir()
     return d
+
+
+@pytest.fixture
+def macro_workbook(tmp_path: Path) -> Path:
+    """Create a macro-enabled workbook (.xlsm) for macro safety tests.
+
+    Creates an .xlsx file with VBA project marker (simulated macro content).
+    Note: This creates the file structure, not actual VBA code (requires oletools).
+
+    Returns:
+        Path to the created .xlsm file.
+    """
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Sheet1"
+    ws["A1"] = "This workbook has macros"
+    ws["A2"] = "Check with xls_has_macros tool"
+
+    path = tmp_path / "test_macros.xlsm"
+    wb.save(str(path))
+
+    # Create a minimal VBA project structure by injecting vbaProject.bin
+    import zipfile
+    from io import BytesIO
+
+    vba_marker = b"PK\x03\x04"  # ZIP signature
+
+    with zipfile.ZipFile(path, "a") as zf:
+        # Add a fake vbaProject.bin marker
+        zf.writestr("xl/vbaProject.bin", vba_marker + b"VBA_PROJECT_MARKER")
+
+    return path
+
+
+@pytest.fixture
+def clean_workbook(tmp_path: Path) -> Path:
+    """Create a clean workbook without macros for control tests.
+
+    Returns:
+        Path to the created .xlsx file.
+    """
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "CleanSheet"
+    ws["A1"] = "No macros here"
+
+    path = tmp_path / "clean.xlsx"
+    wb.save(str(path))
+    return path
