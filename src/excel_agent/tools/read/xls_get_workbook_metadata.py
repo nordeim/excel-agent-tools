@@ -39,7 +39,7 @@ def _run() -> dict:
                         total_formulas += 1
             total_tables += len(ws.tables)
 
-        named_range_count = len(list(wb.defined_names.definedName))
+        named_range_count = len(wb.defined_names)
 
         return build_response(
             "success",

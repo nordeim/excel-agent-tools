@@ -153,8 +153,8 @@ def large_workbook(tmp_path: Path) -> Path:
     # Header
     ws.append(["ID", "Name", "Value", "Date", "Active"])
 
-    # Data rows
-    base_date = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
+    # Data rows - no timezone for Excel compatibility
+    base_date = datetime.datetime(2026, 1, 1)
     for i in range(1, 100_001):
         ws.append(
             [
