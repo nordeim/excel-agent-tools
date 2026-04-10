@@ -1,9 +1,9 @@
 # CLAUDE.md - AI Coding Agent Briefing
 ## excel-agent-tools v1.0.0
 
-**Last Updated:** April 9, 2026  
-**Status:** Production-Ready | All 53 Tools Implemented  
-**Current Phase:** Phase 13 Complete (E2E Integration & Documentation)
+**Last Updated:** April 10, 2026
+**Status:** Production-Ready | All 53 Tools Implemented | Phase 14 Complete
+**Current Phase:** Phase 14 Complete (Hardening, Security & Release Preparation)
 
 ---
 
@@ -15,18 +15,123 @@
 | Metric | Value |
 |--------|-------|
 | **Total Tools** | 53 (100% implemented) |
-| **Source Files** | 86 Python modules |
+| **Source Files** | 86 Python modules + 8 new Phase 14 modules |
 | **Test Files** | 36 test modules |
-| **Total Tests** | 430+ tests |
+| **Total Tests** | 430+ tests (343 unit tests passing) |
 | **Coverage** | >90% |
-| **Documentation** | 10 MD files |
+| **Documentation** | 10+ MD files |
 | **Entry Points** | 53 CLI commands |
+| **SDK** | AgentClient with retry/backoff |
 
 ### Design Philosophy
 1. **Governance-First**: Destructive ops require HMAC-SHA256 scoped tokens
 2. **Formula Integrity**: Dependency graphs block mutations breaking `#REF!` chains
 3. **AI-Native Contracts**: Strict JSON stdout, standardized exit codes (0-5)
 4. **Headless Operation**: Zero Excel dependency, runs on any server
+5. **Distributed-Ready**: Pluggable state backends (Redis) for multi-agent deployments
+
+---
+
+## Phase 14 Accomplishments (April 10, 2026)
+
+### 1. Agent Orchestration SDK (`src/excel_agent/sdk/`)
+**New Feature**: Python client for simplified AI framework integration
+
+```python
+from excel_agent.sdk import AgentClient
+
+client = AgentClient(secret_key="your-secret")
+
+# Clone and modify
+clone_path = client.clone("data.xlsx", output_dir="./work")
+data = client.read_range(clone_path, "A1:C10")
+
+# Safe structural edit with automatic retry
+from excel_agent.sdk import ImpactDeniedError
+
+try:
+    token = client.generate_token("sheet:delete", clone_path)
+    client.run("structure.xls_delete_sheet",
+              input=clone_path, name="OldSheet", token=token)
+except ImpactDeniedError as e:
+    print(f"Denied: {e.guidance}")
+    print(f"Impact: {e.impact}")
+```
+
+**Key Classes:**
+- `AgentClient`: Main SDK client with retry logic
+- `ImpactDeniedError`: Structured denial with guidance
+- `TokenRequiredError`: Token authentication error
+- `ToolExecutionError`: General execution failure
+
+### 2. Pre-commit Configuration (`.pre-commit-config.yaml`)
+**Security Hardening**: Automated code quality and security scanning
+
+```yaml
+# Hooks include:
+# - detect-secrets: Prevents accidental secret commits
+# - detect-private-key: Blocks private key files
+# - black: Code formatting
+# - ruff: Linting
+# - mypy: Type checking
+```
+
+**Usage:**
+```bash
+pre-commit install  # One-time setup
+pre-commit run --all-files  # Manual run
+git commit -m "message"  # Automatic hooks on commit
+```
+
+### 3. Distributed State Protocols (`src/excel_agent/governance/`)
+**Scalability Feature**: Pluggable storage for multi-agent deployments
+
+**New Files:**
+- `stores.py`: Protocol definitions (`TokenStore`, `AuditBackend`)
+- `backends/redis.py`: Redis implementation
+
+**Usage:**
+```python
+from excel_agent.governance.backends.redis import RedisTokenStore
+from excel_agent.governance.token_manager import ApprovalTokenManager
+
+# Distributed token tracking
+redis_store = RedisTokenStore("redis://localhost:6379")
+manager = ApprovalTokenManager(
+    secret="my-secret",
+    nonce_store=redis_store
+)
+```
+
+### 4. Dependency Version Updates
+**Accuracy Improvement**: Pinned to actual installed versions
+
+| Package | Old Version | New Version |
+|---------|-------------|-------------|
+| pandas | >=2.1.0 | >=3.0.0 |
+| jsonschema | >=4.23.0 | >=4.26.0 |
+| pytest | >=8.0.0 | >=9.0.0 |
+| black | >=24.0.0 | >=26.0.0 |
+
+**New Optional Extras:**
+```toml
+[project.optional-dependencies]
+redis = ["redis>=6.0.0"]
+security = [
+    "cyclonedx-python-lib>=9.0.0",
+    "detect-secrets>=1.5.0",
+    "safety>=3.7.0",
+]
+```
+
+### 5. Chunked I/O Test Fix
+**Bug Fix**: Corrected test expectation for JSONL chunked output
+
+```python
+# Fixed in tests/integration/test_clone_modify_workflow.py:306
+# Before: assert chunk.get("status") == "success"  # Wrong - JSONL has no envelope
+# After:  assert "values" in chunk  # Correct - direct data
+```
 
 ---
 
@@ -34,40 +139,51 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     AI Agent / Orchestrator                      │
+│ AI Agent / Orchestrator │
+│ (Claude, GPT, LangChain, AutoGen) │
 └───────────────────────┬───────────────────────────────────────────┘
-                        │ JSON stdin/stdout
+│ JSON stdin/stdout
 ┌───────────────────────▼───────────────────────────────────────────┐
-│                    CLI Tool Layer (53 Tools)                     │
-│  ┌──────────┬──────────┬──────────┬──────────┬──────────┐       │
-│  │Governance│   Read   │  Write   │ Structure│  Cells   │       │
-│  │   (6)    │   (7)    │   (4)    │   (8)    │   (4)    │       │
-│  ├──────────┼──────────┼──────────┼──────────┼──────────┤       │
-│  │ Formulas │ Objects  │ Formatting│ Macros  │  Export  │       │
-│  │   (6)    │   (5)    │   (5)    │   (5)    │   (3)    │       │
-│  └──────────┴──────────┴──────────┴──────────┴──────────┘       │
+│ Agent SDK Layer (NEW in Phase 14) │
+│ ┌─────────────────────────────────────────┐ │
+│ │ AgentClient: retry, parse, token mgmt │ │
+│ └─────────────────────────────────────────┘ │
 └───────────────────────┬───────────────────────────────────────────┘
-                        │ _tool_base.run_tool()
+│ subprocess
 ┌───────────────────────▼───────────────────────────────────────────┐
-│                      Core Hub Layer                                │
-│  ┌─────────────────┬─────────────────┬──────────────────┐         │
-│  │   ExcelAgent    │ DependencyTrack │  TokenManager    │         │
-│  │   (Context Mgr) │    (Graph)      │   (HMAC-SHA256)  │         │
-│  ├─────────────────┼─────────────────┼──────────────────┤         │
-│  │   FileLock      │   RangeSerial   │   AuditTrail     │         │
-│  │  (OS-level)     │   (A1/R1C1)     │   (JSONL)        │         │
-│  ├─────────────────┼─────────────────┼──────────────────┤         │
-│  │   VersionHash   │   MacroHandler  │   ChunkedIO      │         │
-│  │  (Geometry)     │   (oletools)    │   (Streaming)    │         │
-│  └─────────────────┴─────────────────┴──────────────────┘         │
+│ CLI Tool Layer (53 Tools) │
+│ ┌──────────┬──────────┬──────────┬──────────┬──────────┐ │
+│ │Governance│ Read │ Write │ Structure│ Cells │ │
+│ │ (6) │ (7) │ (4) │ (8) │ (4) │ │
+│ ├──────────┼──────────┼──────────┼──────────┼──────────┤ │
+│ │ Formulas │ Objects │ Formatting│ Macros │ Export │ │
+│ │ (6) │ (5) │ (5) │ (5) │ (3) │ │
+│ └──────────┴──────────┴──────────┴──────────┴──────────┘ │
 └───────────────────────┬───────────────────────────────────────────┘
-                        │ Libraries
+│ _tool_base.run_tool()
 ┌───────────────────────▼───────────────────────────────────────────┐
-│                      Library Layer                                 │
-│  ┌──────────┬──────────┬──────────┬──────────┬──────────┐       │
-│  │openpyxl  │ formulas │ oletools │defusedxml│ jsonschema│       │
-│  │(I/O)     │(Tier 1)  │(Macros)  │(Security)│(Schemas)  │       │
-│  └──────────┴──────────┴──────────┴──────────┴──────────┘       │
+│ Core Hub Layer │
+│ ┌─────────────────┬─────────────────┬──────────────────┐ │
+│ │ ExcelAgent │ DependencyTrack │ TokenManager │ │
+│ │ (Context Mgr) │ (Graph) │ (HMAC-SHA256) │ │
+│ ├─────────────────┼─────────────────┼──────────────────┤ │
+│ │ FileLock │ RangeSerial │ AuditTrail │ │
+│ │ (OS-level) │ (A1/R1C1) │ (JSONL) │ │
+│ ├─────────────────┼─────────────────┼──────────────────┤ │
+│ │ VersionHash │ MacroHandler │ ChunkedIO │ │
+│ │ (Geometry) │ (oletools) │ (Streaming) │ │
+│ ├─────────────────┼─────────────────┼──────────────────┤ │
+│ │ Distributed │ Redis Backend │ InMemory │ │
+│ │ State (NEW) │ (NEW) │ (Default) │ │
+│ └─────────────────┴─────────────────┴──────────────────┘ │
+└───────────────────────┬───────────────────────────────────────────┘
+│ Libraries
+┌───────────────────────▼───────────────────────────────────────────┐
+│ Library Layer │
+│ ┌──────────┬──────────┬──────────┬──────────┬──────────┐ │
+│ │openpyxl │ formulas │ oletools │defusedxml│ jsonschema│ │
+│ │(I/O) │(Tier 1) │(Macros) │(Security)│(Schemas) │ │
+│ └──────────┴──────────┴──────────┴──────────┴──────────┘ │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -131,7 +247,7 @@ Every tool outputs exactly one JSON object:
     "rows_inserted": 0
   },
   "warnings": [],
-  "guidance": "..."  // Present when denied
+  "guidance": "..." // Present when denied
 }
 ```
 
@@ -144,7 +260,7 @@ def _run() -> dict:
     parser = create_parser("Description")
     parser.add_argument("--input", required=True)
     args = parser.parse_args()
-    
+
     with ExcelAgent(path, mode="rw") as agent:
         # Core logic here
         return build_response(
@@ -260,70 +376,82 @@ def main() -> None:
 
 ```
 excel-agent-tools/
-├── 📄 pyproject.toml              # 53 entry points, deps, tool configs
-├── 📄 README.md                   # Project overview
+├── 📄 pyproject.toml                    # 53 entry points, deps, tool configs
+├── 📄 README.md                         # Project overview
 ├── 📄 Project_Architecture_Document.md  # Deep architecture
-├── 📄 CLAUDE.md                   # THIS FILE - Agent briefing
+├── 📄 CLAUDE.md                         # THIS FILE - Agent briefing
+├── 📄 CHANGELOG.md                      # Phase 14 additions
+├── 📄 .pre-commit-config.yaml           # NEW: Pre-commit hooks
 │
 ├── 📂 src/excel_agent/
-│   ├── 📄 __init__.py            # Lazy imports, version 1.0.0
-│   │
-│   ├── 📂 core/                  # Foundation layer
-│   │   ├── 📄 agent.py           # ExcelAgent context manager
-│   │   ├── 📄 locking.py        # FileLock (fcntl/msvcrt)
-│   │   ├── 📄 serializers.py    # RangeSerializer (A1/R1C1/Named/Table)
-│   │   ├── 📄 dependency.py      # DependencyTracker + Tarjan SCC
-│   │   ├── 📄 version_hash.py    # SHA-256 geometry hashing
-│   │   ├── 📄 formula_updater.py # Reference shifting
-│   │   ├── 📄 chunked_io.py      # Streaming for >100k rows
-│   │   ├── 📄 type_coercion.py   # JSON → Python types
-│   │   └── 📄 style_serializer.py # Style serialization
-│   │
-│   ├── 📂 governance/            # Security & Compliance
-│   │   ├── 📄 token_manager.py   # ApprovalTokenManager (HMAC-SHA256)
-│   │   ├── 📄 audit_trail.py     # AuditTrail backends
-│   │   └── 📂 schemas/           # JSON Schema files
-│   │
-│   ├── 📂 calculation/           # Two-tier engine
-│   │   ├── 📄 tier1_engine.py    # `formulas` library wrapper
-│   │   ├── 📄 tier2_libreoffice.py # LibreOffice headless
-│   │   └── 📄 error_detector.py  # Formula error scanner
-│   │
-│   ├── 📂 utils/                 # Shared utilities
-│   │   ├── 📄 exit_codes.py      # ExitCode enum (0-5)
-│   │   ├── 📄 json_io.py         # build_response(), ExcelAgentEncoder
-│   │   ├── 📄 cli_helpers.py     # argparse patterns
-│   │   ├── 📄 exceptions.py      # ExcelAgentError hierarchy
-│   │   └── 📄 __init__.py
-│   │
-│   └── 📂 tools/                 # 53 CLI tools (10 categories)
-│       ├── 📄 _tool_base.py      # Base runner for all tools
-│       ├── 📂 governance/        # 6 tools
-│       ├── 📂 read/              # 7 tools
-│       ├── 📂 write/             # 4 tools
-│       ├── 📂 structure/       # 8 tools
-│       ├── 📂 cells/             # 4 tools
-│       ├── 📂 formulas/          # 6 tools
-│       ├── 📂 objects/           # 5 tools
-│       ├── 📂 formatting/        # 5 tools
-│       ├── 📂 macros/            # 5 tools
-│       └── 📂 export/            # 3 tools
+│ ├── 📄 __init__.py                     # Lazy imports, version 1.0.0
+│ │
+│ ├── 📂 core/                           # Foundation layer
+│ │ ├── 📄 agent.py                      # ExcelAgent context manager
+│ │ ├── 📄 locking.py                    # FileLock (fcntl/msvcrt)
+│ │ ├── 📄 serializers.py                # RangeSerializer (A1/R1C1/Named/Table)
+│ │ ├── 📄 dependency.py               # DependencyTracker + Tarjan SCC
+│ │ ├── 📄 version_hash.py              # SHA-256 geometry hashing
+│ │ ├── 📄 formula_updater.py            # Reference shifting
+│ │ ├── 📄 chunked_io.py                 # Streaming for >100k rows
+│ │ ├── 📄 type_coercion.py              # JSON → Python types
+│ │ └── 📄 style_serializer.py          # Style serialization
+│ │
+│ ├── 📂 governance/                     # Security & Compliance
+│ │ ├── 📄 token_manager.py              # ApprovalTokenManager (HMAC-SHA256)
+│ │ │                                    #   + NonceStore support (Phase 14)
+│ │ ├── 📄 audit_trail.py                # AuditTrail backends
+│ │ ├── 📄 stores.py                     # NEW: TokenStore/AuditBackend Protocols
+│ │ ├── 📂 backends/                     # NEW: Pluggable backends
+│ │ │ ├── 📄 __init__.py
+│ │ │ └── 📄 redis.py                    # NEW: Redis implementations
+│ │ └── 📂 schemas/                      # JSON Schema files
+│ │
+│ ├── 📂 calculation/                    # Two-tier engine
+│ │ ├── 📄 tier1_engine.py               # `formulas` library wrapper
+│ │ ├── 📄 tier2_libreoffice.py          # LibreOffice headless
+│ │ └── 📄 error_detector.py             # Formula error scanner
+│ │
+│ ├── 📂 sdk/                           # NEW: Agent Orchestration SDK
+│ │ ├── 📄 __init__.py                   # NEW: SDK exports
+│ │ └── 📄 client.py                     # NEW: AgentClient + exceptions
+│ │
+│ ├── 📂 utils/                          # Shared utilities
+│ │ ├── 📄 exit_codes.py                 # ExitCode enum (0-5)
+│ │ ├── 📄 json_io.py                    # build_response(), ExcelAgentEncoder
+│ │ ├── 📄 cli_helpers.py                # argparse patterns
+│ │ ├── 📄 exceptions.py                 # ExcelAgentError hierarchy
+│ │ └── 📄 __init__.py
+│ │
+│ └── 📂 tools/                          # 53 CLI tools (10 categories)
+│   ├── 📄 _tool_base.py                 # Base runner for all tools
+│   ├── 📂 governance/                   # 6 tools
+│   ├── 📂 read/                         # 7 tools
+│   ├── 📂 write/                        # 4 tools
+│   ├── 📂 structure/                    # 8 tools
+│   ├── 📂 cells/                        # 4 tools
+│   ├── 📂 formulas/                     # 6 tools
+│   ├── 📂 objects/                      # 5 tools
+│   ├── 📂 formatting/                   # 5 tools
+│   ├── 📂 macros/                       # 5 tools
+│   └── 📂 export/                       # 3 tools
 │
 ├── 📂 tests/
-│   ├── 📄 __init__.py
-│   ├── 📄 conftest.py            # Shared fixtures (sample_workbook, etc.)
-│   ├── 📂 unit/                  # 20+ test modules
-│   └── 📂 integration/           # 10+ test modules
+│ ├── 📄 __init__.py
+│ ├── 📄 conftest.py                     # Shared fixtures
+│ ├── 📂 unit/                           # 20+ test modules
+│ ├── 📂 integration/                    # 10+ test modules
+│ └── 📂 property/                       # Hypothesis fuzzing tests
 │
 ├── 📂 docs/
-│   ├── 📄 DESIGN.md              # Architecture blueprint
-│   ├── 📄 API.md                 # CLI reference (all 53 tools)
-│   ├── 📄 WORKFLOWS.md           # 5 production recipes
-│   ├── 📄 GOVERNANCE.md          # Token lifecycle
-│   └── 📄 DEVELOPMENT.md         # Contributor guide
+│ ├── 📄 DESIGN.md                       # Architecture blueprint
+│ ├── 📄 API.md                          # CLI reference (all 53 tools)
+│ ├── 📄 WORKFLOWS.md                    # 5 production recipes
+│ ├── 📄 GOVERNANCE.md                   # Token lifecycle
+│ └── 📄 DEVELOPMENT.md                  # Contributor guide
 │
 └── 📂 scripts/
-    └── 📄 install_libreoffice.sh # CI setup script
+  └── 📄 install_libreoffice.sh          # CI setup script
 ```
 
 ---
@@ -335,15 +463,15 @@ excel-agent-tools/
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                                                                 │
-│  ANALYZE  →  PLAN  →  VALIDATE  →  IMPLEMENT  →  VERIFY  →  DELIVER
+│  ANALYZE → PLAN → VALIDATE → IMPLEMENT → VERIFY → DELIVER      │
 │                                                                 │
-│  • Deep requirement    • Phases,        • Write code    • Test
-│    mining              checklists        modular      coverage
-│  • Research            • Decision          documented
-│  • Risk assessment       points          • Continuous
-│                           • User            testing
-│                             confirm       • Follow style
-│                                                                             │
+│  • Deep requirement   • Phases,    • Write code   • Test      │
+│    mining               checklists   modular        coverage    │
+│  • Research           • Decision     documented                 │
+│  • Risk assessment    points       • Continuous                 │
+│  • User testing                        testing                  │
+│    confirm     • Follow style                                   │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -424,25 +552,98 @@ export EXCEL_AGENT_SECRET="256-bit-hex-secret-key"
 - **PDF Export**: Requires LibreOffice headless
 - **Ubuntu/Debian**: `sudo apt-get install -y libreoffice-calc`
 
+### 6. Tier 1 Calculation Workflow (CRITICAL)
+
+**The `formulas` library operates on disk files, NOT in-memory workbooks.**
+
+```python
+# WRONG: This will calculate stale file
+with ExcelAgent(path, mode="rw") as agent:
+    agent.workbook["Sheet1"]["A1"] = 42  # In-memory only
+    Tier1Calculator(path).calculate()  # Calculates old file!
+
+# CORRECT: Save before calculating
+with ExcelAgent(path, mode="rw") as agent:
+    agent.workbook["Sheet1"]["A1"] = 42
+    # ExcelAgent.__exit__ saves automatically
+
+# Now calculate
+Tier1Calculator(path).calculate()
+```
+
+**Workflow:** Save changes → Run Tier 1 → Reload workbook
+
 ---
 
 ## Common Issues & Solutions
 
 ### Issue: File Lock Not Released
-**Cause**: Exception in context body before `__exit__`  
+**Cause**: Exception in context body before `__exit__`
 **Solution**: `FileLock.__exit__` always releases lock (in `finally` block)
 
 ### Issue: `#REF!` Errors After Structural Change
-**Cause**: Deleted cells were referenced by formulas  
+**Cause**: Deleted cells were referenced by formulas
 **Solution**: Run `xls-dependency-report` before destructive ops, fix refs with `xls-update-references`
 
 ### Issue: Token Validation Fails
-**Cause**: Token expired, wrong scope, or file hash mismatch  
+**Cause**: Token expired, wrong scope, or file hash mismatch
 **Solution**: Generate new token with correct scope and TTL
 
 ### Issue: Chunked Read Returns JSONL Not JSON
-**Cause**: `--chunked` flag emits one JSON object per line  
+**Cause**: `--chunked` flag emits one JSON object per line
 **Solution**: Parse as JSONL (one JSON per line), not single JSON
+
+### Issue: SDK Returns ImpactDeniedError
+**Cause**: Destructive operation would break formulas
+**Solution** (using SDK):
+```python
+from excel_agent.sdk import ImpactDeniedError, AgentClient
+
+client = AgentClient()
+try:
+    result = client.run("structure.xls_delete_sheet", ...)
+except ImpactDeniedError as e:
+    print(f"Guidance: {e.guidance}")
+    print(f"Impact: {e.impact}")
+    # Parse guidance, run remediation, retry
+```
+
+### Issue: Pre-commit Fails on detect-secrets
+**Cause**: Existing secrets in baseline
+**Solution**:
+```bash
+detect-secrets scan > .secrets.baseline
+detect-secrets audit .secrets.baseline
+git add .secrets.baseline
+```
+
+### Issue: Redis Backend Not Available
+**Cause**: `redis` package not installed
+**Solution**: `pip install excel-agent-tools[redis]`
+
+---
+
+## Lessons Learned (Phase 14)
+
+### 1. Chunked I/O Output Format
+**Discovery**: Chunked mode returns raw JSONL (row data), not JSON response envelope
+**Fix**: Updated test to assert on `"values" in chunk` instead of `chunk.get("status")`
+
+### 2. sigstore-python Package Name
+**Discovery**: Package is `sigstore` in PyPI, not `sigstore-python`
+**Fix**: Updated pyproject.toml to exclude from pip installs (recommend pipx)
+
+### 3. Token Store Protocol Design
+**Discovery**: In-memory set doesn't persist across processes
+**Solution**: Added `TokenStore` Protocol with `InMemoryTokenStore` and `RedisTokenStore` implementations
+
+### 4. SDK Error Handling
+**Discovery**: AI agents need structured error information for recovery
+**Solution**: `ImpactDeniedError` includes `guidance` and `impact` fields for programmatic remediation
+
+### 5. Pre-commit Hook Order
+**Discovery**: `detect-secrets` must run after other hooks to avoid false positives in generated files
+**Solution**: Configured hook order with stages in `.pre-commit-config.yaml`
 
 ---
 
@@ -494,6 +695,26 @@ if data["status"] == "success":
     rows = data["data"]["values"]
 ```
 
+### SDK Usage Example
+
+```python
+from excel_agent.sdk import AgentClient
+
+client = AgentClient(secret_key="your-secret")
+
+# Clone
+clone = client.clone("template.xlsx", output_dir="./work")
+
+# Read
+data = client.read_range(clone, "A1:C10")
+
+# Modify
+client.write_range(clone, clone, "A1", [["New", "Data"]])
+
+# Recalculate
+client.recalculate(clone, clone)
+```
+
 ---
 
 ## Dependencies
@@ -504,8 +725,9 @@ if data["status"] == "success":
 | defusedxml | >=0.7.1 | XXE protection (mandatory) |
 | formulas[excel] | >=1.3.4 | Tier 1 calculation |
 | oletools | >=0.60.2 | Macro analysis |
-| jsonschema | >=4.23.0 | Input validation |
-| pandas | >=2.1.0 | Chunked I/O (internal) |
+| jsonschema | >=4.26.0 | Input validation |
+| pandas | >=3.0.0 | Chunked I/O (internal) |
+| redis | >=6.0.0 | Optional distributed state |
 
 ---
 
@@ -521,6 +743,7 @@ if data["status"] == "success":
 | `docs/WORKFLOWS.md` | 5 production recipes with JSON |
 | `docs/GOVERNANCE.md` | Token lifecycle & security |
 | `docs/DEVELOPMENT.md` | Contributor guide |
+| `CHANGELOG.md` | Version history |
 
 ---
 
@@ -542,7 +765,7 @@ if data["status"] == "success":
 | Phase 11 | ✅ Complete | Formatting tools (5) |
 | Phase 12 | ✅ Complete | Export tools (3) |
 | Phase 13 | ✅ Complete | E2E tests + Documentation |
-| **Phase 14** | ⏭️ Next | Hardening, security audit |
+| **Phase 14** | ✅ Complete | Hardening, Security, SDK, Pre-commit |
 
 ---
 
@@ -557,6 +780,9 @@ if data["status"] == "success":
 5. **ALWAYS** handle all UI states: loading, error, empty, success
 6. **ALWAYS** disable buttons during async operations
 7. **ALWAYS** include `onError` handler with user feedback
+8. **NEVER** commit secrets - pre-commit hooks will block
+9. **ALWAYS** save before Tier 1 calculation (disk-based limitation)
+10. **ALWAYS** use SDK for new integrations (simpler than raw subprocess)
 
 ### Code Style
 
@@ -574,10 +800,11 @@ if data["status"] == "success":
 - Minimum coverage: 90%
 - Test behavior, not implementation
 - Use factory pattern for test data: `getMockX(overrides)`
+- Pre-commit hooks must pass before committing
 
 ---
 
-**Document Status**: Production-Ready  
-**Last Validated**: April 9, 2026  
-**Maintained by**: excel-agent-tools contributors  
+**Document Status**: Production-Ready
+**Last Validated**: April 10, 2026
+**Maintained by**: excel-agent-tools contributors
 **License**: MIT

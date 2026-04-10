@@ -1,27 +1,23 @@
 # excel-agent-tools runtime dependencies
 # Pinned for reproducibility — update with care
-#
-# openpyxl: Read/write Excel 2010 xlsx/xlsm files (headless, no Excel needed)
+# Last updated: April 2026
+
+# Core dependencies
 openpyxl==3.1.5
-#
-# defusedxml: MANDATORY — openpyxl does not guard against XML attacks by default
 defusedxml==0.7.1
-#
-# oletools: VBA macro analysis (detection, extraction, risk scanning)
-# Wrapped behind MacroAnalyzer Protocol for swappable backends
 oletools==0.60.2
-#
-# formulas[excel]: Excel formula interpreter — Tier 1 calculation engine
-# Compiles workbooks to Python, executes without Excel COM server
 formulas[excel]==1.3.4
-#
-# pandas: Internal use only for chunked I/O of large datasets (>100k rows)
-pandas>=2.1.0,<3.0.0
-#
-# jsonschema: JSON Schema validation for all tool inputs
-jsonschema>=4.23.0,<5.0.0
-#
-# Successfully built ezodf
-# Installing collected packages: schedula, ezodf, easygui, dictdiffer, numpy-financial, colorclass, formulas, pcodedmp, oletools
-# Successfully installed colorclass-2.2.2 dictdiffer-0.9.0 easygui-0.98.3 ezodf-0.3.2 formulas-1.3.4 numpy-financial-1.0.0 oletools-0.60.2 pcodedmp-1.2.6 schedula-1.6.15
-# Successfully installed black-26.3.1 hypothesis-6.151.11 mypy-1.20.0 pytest-9.0.3 pytokens-0.4.1 ruff-0.15.9 types-defusedxml-0.7.0.20260408 types-jsonschema-4.26.0.20260408 types-openpyxl-3.1.5.20260408
+pandas==3.0.2
+jsonschema==4.26.0
+
+# Phase 14: Optional distributed state management
+# redis==6.4.0  # Uncomment if using distributed nonce/token storage
+
+# Phase 14: Optional security hardening tools
+# cyclonedx-python-lib==9.1.0  # Uncomment for SBOM generation
+# detect-secrets==1.5.0        # Uncomment for secret scanning
+# safety==3.7.0                # Uncomment for vulnerability scanning
+
+# Successfully installed packages:
+#   openpyxl-3.1.5 defusedxml-0.7.1 oletools-0.60.2 formulas-1.3.4
+#   pandas-3.0.2 jsonschema-4.26.0

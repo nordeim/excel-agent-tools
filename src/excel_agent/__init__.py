@@ -3,6 +3,8 @@ excel-agent-tools: 53 governance-first CLI tools for AI agents to safely
 read, write, and manipulate Excel workbooks.
 
 Headless, JSON-native, zero Excel dependency.
+
+Phase 14 Complete: Agent SDK, Distributed State Protocols, Pre-commit Hooks
 """
 
 __version__ = "1.0.0"

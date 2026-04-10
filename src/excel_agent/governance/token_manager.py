@@ -113,16 +113,30 @@ class ApprovalTokenManager:
             print("Token invalid or expired")
     """
 
-    def __init__(self, secret: str | None = None):
+    def __init__(
+        self,
+        secret: str | None = None,
+        *,
+        nonce_store: object | None = None,
+    ):
         """Initialize the token manager.
 
         Args:
             secret: HMAC secret key. If None, generates a random key (for testing).
+            nonce_store: Optional store for nonce tracking (default: in-memory set).
+                         Use RedisTokenStore for distributed deployments.
         """
         if secret is None:
             secret = secrets.token_hex(32)
         self._secret = secret.encode("utf-8")
-        self._used_nonces: set[str] = set()
+
+        # Phase 14: Support pluggable nonce stores
+        if nonce_store is None:
+            self._used_nonces: set[str] = set()
+            self._nonce_store = None
+        else:
+            self._nonce_store = nonce_store
+            self._used_nonces = set()  # Unused when external store provided
 
     def generate_token(
         self,
@@ -244,8 +258,13 @@ class ApprovalTokenManager:
                 reason="file_hash_mismatch",
             )
 
-        # Check nonce (single-use)
-        if token.nonce in self._used_nonces:
+        # Check nonce (single-use) - Phase 14: Support external store
+        if self._nonce_store is not None:
+            nonce_used = token.nonce in self._nonce_store
+        else:
+            nonce_used = token.nonce in self._used_nonces
+
+        if nonce_used:
             raise PermissionDeniedError(
                 "Token already used (replay detected)",
                 reason="replay",
@@ -268,8 +287,11 @@ class ApprovalTokenManager:
                 reason="invalid_signature",
             )
 
-        # Mark nonce as used
-        self._used_nonces.add(token.nonce)
+        # Mark nonce as used - Phase 14: Support external store
+        if self._nonce_store is not None:
+            self._nonce_store.add(token.nonce)
+        else:
+            self._used_nonces.add(token.nonce)
 
         logger.debug(
             "Token validated: scope=%s, file=%s, nonce=%s...",
@@ -279,5 +301,10 @@ class ApprovalTokenManager:
         )
 
     def clear_used_nonces(self) -> None:
-        """Clear the used nonces set (for testing)."""
+        """Clear the used nonces set (for testing).
+
+        Phase 14: Also clears external store if configured.
+        """
         self._used_nonces.clear()
+        if self._nonce_store is not None:
+            self._nonce_store.clear()

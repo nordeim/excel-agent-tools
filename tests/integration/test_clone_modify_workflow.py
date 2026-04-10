@@ -303,7 +303,8 @@ class TestCloneModifyWorkflow:
         for line in lines:
             if line.strip():
                 chunk = json.loads(line)
-                assert chunk.get("status") == "success"
+                # Chunked mode returns row data directly, not a response envelope
+                assert "values" in chunk, f"Expected 'values' key in chunk, got: {chunk.keys()}"
 
     def test_formula_preservation_through_pipeline(
         self, workflow_env: Path, formula_workbook: Path
