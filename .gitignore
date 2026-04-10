@@ -22,6 +22,8 @@ dist/
 .gemini
 .kilo
 .venv
+oc.sh
+
 
 # --- Virtual Environments ---
 venv/

@@ -10,6 +10,10 @@ Awesome job on your meticulous review, analysis and planning. Please keep up the
 
 ---
 
+Awesome job on your meticulous review, analysis and planning. Please keep up the good work in your rigorous and meticulous approach to planning and execution. Now, please think deeper and think harder how to imagine and create a 'dummy' (simulated) data including formulas and macros to verify the real-life applicability of this project (the excel tools), also plan to create an associate 'e2e' test plan with steps that makes use of the dummy data. The goal is to discover any gaps in the claimed functionality of the 'excel-agent-tools' in order to evaluate its 'fit-for-use'.
+
+---
+
 Awesome meticulous job so far. Please keep up the good work. Yes, please meticulously plan to generate the code files for Phase 2.
 
 ---
