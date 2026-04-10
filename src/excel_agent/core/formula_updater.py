@@ -257,17 +257,39 @@ def _shift_token_rows(
 
 
 def _shift_single_row(row: int, dollar: str, start_row: int, delta: int) -> int | None:
-    """Shift a single row number. Returns None if the row was deleted."""
+    """Shift a single row number. Returns None if the row was deleted.
+
+    Args:
+        row: The row number
+        dollar: "$" if absolute row reference, "" if relative
+        start_row: Row where insert/delete happened
+        delta: Positive for insert, negative for delete
+
+    Returns:
+        New row number, or None if row was deleted
+
+    Examples:
+        # Fully relative (A1) - shifts if at/after start_row
+        _shift_single_row(5, "", 3, 1) -> 6    # Insert before
+        _shift_single_row(5, "", 3, -1) -> 4   # Delete before
+        _shift_single_row(2, "", 3, 1) -> 2    # Before start, no shift
+
+        # Row-absolute (A$1) - never shifts
+        _shift_single_row(5, "$", 3, 1) -> 5
+        _shift_single_row(5, "$", 3, -1) -> 5
+
+        # Deleted row returns None
+        _shift_single_row(3, "", 3, -1) -> None
+    """
+    # Absolute reference: never shift
     if dollar == "$":
-        if row >= start_row:
-            new_row = row + delta
-            return new_row if new_row >= 1 else None
         return row
-    else:
-        if row >= start_row:
-            new_row = row + delta
-            return new_row if new_row >= 1 else None
-        return row
+
+    # Relative reference: shift if at/after start_row
+    if row >= start_row:
+        new_row = row + delta
+        return new_row if new_row >= 1 else None
+    return row
 
 
 def _shift_cols_in_formula(

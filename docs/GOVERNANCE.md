@@ -20,18 +20,31 @@ This document defines the token lifecycle, audit schema, and safety protocols fo
 
 ### Token Structure
 
-Tokens are HMAC-SHA256 signed JSON with file-hash binding:
+Tokens are HMAC-SHA256 signed, **pipe-delimited strings** with file-hash binding:
 
-```json
-{
-  "scope": "sheet:delete",
-  "target_file_hash": "sha256:abc123...",
-  "nonce": "550e8400-e29b-41d4-a716-446655440000",
-  "issued_at": 1712585600,
-  "ttl_seconds": 300,
-  "signature": "base64(hmac-sha256(secret, scope|hash|nonce|issued_at|ttl))"
-}
 ```
+scope|target_file_hash|nonce|issued_at|ttl_seconds|signature
+```
+
+Where:
+- `scope`: Operation scope (e.g., "sheet:delete")
+- `target_file_hash`: SHA-256 hash of the target workbook
+- `nonce`: Random 32-character hex string (single-use)
+- `issued_at`: Unix timestamp with 6 decimal places
+- `ttl_seconds`: Token lifetime in seconds
+- `signature`: HMAC-SHA256 of the canonical string
+
+The canonical string for signing is:
+```
+scope|target_file_hash|nonce|issued_at|ttl_seconds
+```
+
+Example token:
+```
+sheet:delete|sha256:abc123...|f7a2e4b8...|1712585600.123456|300|a3f7e2d9...
+```
+
+**Note:** Tokens are serialized as pipe-delimited strings, not JSON, for compactness and ease of CLI passing.
 
 ### Scopes
 
