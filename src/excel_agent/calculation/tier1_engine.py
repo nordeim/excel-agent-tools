@@ -27,6 +27,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import openpyxl
+
 logger = logging.getLogger(__name__)
 
 
@@ -81,7 +83,7 @@ class Tier1Calculator:
 
         Args:
             output_path: Where to write the recalculated workbook.
-                If None, writes to a temp directory.
+            If None, writes to a temp directory.
             circular: Set True for workbooks with circular references.
 
         Returns:
@@ -94,6 +96,11 @@ class Tier1Calculator:
 
         try:
             xl_model = formulas.ExcelModel().loads(str(self._path)).finish(circular=circular)
+
+            # Capture original sheet names BEFORE formulas library writes
+            # (formulas uppercases all sheet names when writing)
+            src_wb = openpyxl.load_workbook(self._path)
+            original_sheet_names = src_wb.sheetnames
 
             # Count formulas in the model
             try:
@@ -134,12 +141,33 @@ class Tier1Calculator:
                 out_dir.mkdir(parents=True, exist_ok=True)
                 written = xl_model.write(dirpath=str(out_dir))
                 # formulas writes using the original filename uppercased
-                # Move it to the requested output path
+                # and UPPERCASES ALL SHEET NAMES
+                # Move it to the requested output path and restore sheet names
                 for book_name, book_dict in written.items():
                     src_file = out_dir / book_name
                     if src_file.exists() and src_file != output_path:
                         shutil.move(str(src_file), str(output_path))
-                    break
+                        break
+
+                # Restore original sheet name casing (formulas uppercases all sheet names)
+                # Must use two-step rename to avoid conflicts (e.g., SHEET1->Sheet1
+                # would conflict with SHEET2 if renamed in order)
+                out_wb = openpyxl.load_workbook(output_path)
+                current_sheet_names = out_wb.sheetnames[:]
+
+                # Step 1: Rename to temporary unique names
+                temp_names = [f"_TEMP_SHEET_{i}_" for i in range(len(current_sheet_names))]
+                for i, curr_name in enumerate(current_sheet_names):
+                    if curr_name != temp_names[i]:
+                        out_wb[curr_name].title = temp_names[i]
+
+                # Step 2: Rename to final original names
+                for i, orig_name in enumerate(original_sheet_names):
+                    if temp_names[i] != orig_name:
+                        out_wb[temp_names[i]].title = orig_name
+
+                out_wb.save(output_path)
+
                 result.output_path = str(output_path)
             else:
                 with tempfile.TemporaryDirectory() as tmp:
@@ -153,7 +181,7 @@ class Tier1Calculator:
                 result.unsupported_functions.append(error_msg[:100])
             else:
                 result.errors.append(f"Tier1 error: {error_msg[:200]}")
-                result.error_count += 1
+            result.error_count += 1
 
         result.recalc_time_ms = (time.monotonic() - start) * 1000
         logger.info(

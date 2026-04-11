@@ -47,6 +47,7 @@ def _run() -> dict:
 
     if not args.token:
         raise ValidationError("Approval token required for column deletion.")
+
     mgr = ApprovalTokenManager()
     mgr.validate_token(args.token, "range:delete", input_path)
 
@@ -85,28 +86,37 @@ def _run() -> dict:
 
         # EditSession handles save automatically on exit
 
-    audit = AuditTrail()
-    audit.log_operation(
-        tool="xls_delete_columns",
-        scope="range:delete",
-        resource=f"{sheet_name}!cols {start_letter}-{end_letter}",
-        action="delete",
-        outcome="success",
-        token_used=True,
-        file_hash=file_hash,
-    )
+        # Audit - extract nonce from token for actor identification
+        audit = AuditTrail()
+        token_parts = args.token.split("|") if args.token else ["", "", ""]
+        actor_nonce = token_parts[2] if len(token_parts) > 2 else ""
+        audit.log(
+            tool="xls_delete_columns",
+            scope="range:delete",
+            target_file=output_path,
+            file_version_hash=file_hash,
+            actor_nonce=actor_nonce,
+            operation_details={
+                "sheet": sheet_name,
+                "start_column": args.start_column,
+                "count": args.count,
+            },
+            impact={"cells_modified": 0, "formulas_updated": formulas_updated},
+            success=True,
+            exit_code=0,
+        )
 
-    return build_response(
-        "success",
-        {
-            "sheet": sheet_name,
-            "start_column": args.start_column,
-            "columns_deleted": args.count,
-            "impact": report.to_dict(),
-        },
-        workbook_version=version_hash,
-        impact={"cells_modified": 0, "formulas_updated": formulas_updated},
-    )
+        return build_response(
+            "success",
+            {
+                "sheet": sheet_name,
+                "start_column": args.start_column,
+                "columns_deleted": args.count,
+                "impact": report.to_dict(),
+            },
+            workbook_version=version_hash,
+            impact={"cells_modified": 0, "formulas_updated": formulas_updated},
+        )
 
 
 def main() -> None:

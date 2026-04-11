@@ -22,6 +22,8 @@ from openpyxl.formula import Tokenizer
 from openpyxl.formula.tokenizer import Token
 
 from excel_agent.core.edit_session import EditSession
+from excel_agent.core.version_hash import compute_file_hash
+from excel_agent.governance.audit_trail import AuditTrail
 from excel_agent.tools._tool_base import run_tool
 from excel_agent.utils.cli_helpers import (
     add_common_args,
@@ -110,6 +112,7 @@ def _run() -> dict[str, object]:
 
     input_path = validate_input_path(args.input)
     output_path = validate_output_path(args.output or args.input, create_parents=True)
+    file_hash = compute_file_hash(input_path)
 
     updates_raw = parse_json_arg(args.updates)
     if not isinstance(updates_raw, list):
@@ -166,6 +169,26 @@ def _run() -> dict[str, object]:
         version_hash = session.version_hash
 
         # EditSession handles save automatically on exit
+
+        # Audit - log the reference update operation
+        audit = AuditTrail()
+        audit.log(
+            tool="xls_update_references",
+            scope="structure:modify",
+            target_file=output_path,
+            file_version_hash=file_hash,
+            actor_nonce="system",  # No token required for this remediation tool
+            operation_details={
+                "updates_requested": len(updates_raw),
+                "update_details": update_details,
+            },
+            impact={
+                "cells_modified": 0,
+                "formulas_updated": formulas_updated + defined_names_updated,
+            },
+            success=True,
+            exit_code=0,
+        )
 
         return build_response(
             "success",

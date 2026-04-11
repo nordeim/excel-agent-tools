@@ -39,6 +39,7 @@ def _run() -> dict:
             "Approval token required for sheet rename. "
             "Generate one with: xls-approve-token --scope sheet:rename --file <path>"
         )
+
     mgr = ApprovalTokenManager()
     mgr.validate_token(args.token, "sheet:rename", input_path)
 
@@ -62,16 +63,24 @@ def _run() -> dict:
 
         # EditSession handles save automatically on exit
 
+        # Audit - extract nonce from token for actor identification
         audit = AuditTrail()
-        audit.log_operation(
+        token_parts = args.token.split("|") if args.token else ["", "", ""]
+        actor_nonce = token_parts[2] if len(token_parts) > 2 else ""
+        audit.log(
             tool="xls_rename_sheet",
             scope="sheet:rename",
-            resource=f"{args.old_name} → {args.new_name}",
-            action="rename",
-            outcome="success",
-            token_used=True,
-            file_hash=file_hash,
-            details={"formulas_updated": formulas_updated},
+            target_file=output_path,
+            file_version_hash=file_hash,
+            actor_nonce=actor_nonce,
+            operation_details={
+                "old_name": args.old_name,
+                "new_name": args.new_name,
+                "formulas_updated": formulas_updated,
+            },
+            impact={"cells_modified": 0, "formulas_updated": formulas_updated},
+            success=True,
+            exit_code=0,
         )
 
         return build_response(

@@ -77,17 +77,23 @@ def _run() -> dict:
 
         # EditSession handles save automatically on exit
 
-        # Audit
+        # Audit - extract nonce from token for actor identification
         audit = AuditTrail()
-        audit.log_operation(
+        token_parts = args.token.split("|") if args.token else ["", "", ""]
+        actor_nonce = token_parts[2] if len(token_parts) > 2 else ""
+        audit.log(
             tool="xls_delete_sheet",
             scope="sheet:delete",
-            resource=args.name,
-            action="delete",
-            outcome="success",
-            token_used=True,
-            file_hash=file_hash,
-            details={"impact_acknowledged": args.acknowledge_impact},
+            target_file=output_path,
+            file_version_hash=file_hash,
+            actor_nonce=actor_nonce,
+            operation_details={
+                "deleted_sheet": args.name,
+                "impact_acknowledged": args.acknowledge_impact,
+            },
+            impact={"cells_modified": 0, "formulas_updated": 0},
+            success=True,
+            exit_code=0,
         )
 
         return build_response(

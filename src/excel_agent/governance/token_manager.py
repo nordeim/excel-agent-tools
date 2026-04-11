@@ -123,10 +123,13 @@ class ApprovalTokenManager:
         """Initialize the token manager.
 
         Args:
-            secret: HMAC secret key. If None, generates a random key (for testing).
+            secret: HMAC secret key. If None, reads from EXCEL_AGENT_SECRET
+                env var or generates random key (for testing).
             nonce_store: Optional store for nonce tracking (default: in-memory set).
-                         Use RedisTokenStore for distributed deployments.
+                Use RedisTokenStore for distributed deployments.
         """
+        if secret is None:
+            secret = os.environ.get("EXCEL_AGENT_SECRET")
         if secret is None:
             secret = secrets.token_hex(32)
         self._secret = secret.encode("utf-8")

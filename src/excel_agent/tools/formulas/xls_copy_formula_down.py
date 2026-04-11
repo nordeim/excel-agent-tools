@@ -43,15 +43,29 @@ def _run() -> dict:
         try:
             min_col, min_row, max_col, max_row = range_boundaries(args.target)
             if min_row and max_row:
-                count = max_row - min_row + 1
+                count = max_row - min_row  # Exclude source row
+                if count < 0:
+                    count = 0
             else:
-                count = 1
+                count = 0
         except Exception:
-            count = 1
+            count = 0
     elif args.count:
         count = args.count
     else:
         parser.error("--target or --count is required")
+
+    if count == 0:
+        return build_response(
+            "success",
+            {
+                "source": source,
+                "target": args.target,
+                "filled_count": 0,
+                "filled_range": "",
+            },
+            impact={"cells_modified": 0, "formulas_added": 0},
+        )
 
     formulas_copied = 0
 
@@ -116,8 +130,8 @@ def _adjust_formula(formula: str, row_offset: int) -> str:
     # This is simplified - real implementation would use openpyxl Tokenizer
     def shift_ref(match: re.Match) -> str:
         col = match.group(1)
-        row = match.group(2)
-        dollar = match.group(3) or ""
+        dollar = match.group(2) or ""
+        row = match.group(3)
 
         # If absolute row ($), don't shift
         if dollar == "$":

@@ -30,8 +30,10 @@ def run_tool(func: Callable[[], dict]) -> None:
         print_json(result)
         sys.exit(result.get("exit_code", 0))
     except ExcelAgentError as exc:
+        # Determine status based on exit code
+        status = "denied" if exc.exit_code == 4 else "error"
         error_response = build_response(
-            "error",
+            status,
             None,
             exit_code=exc.exit_code,
             warnings=[str(exc)],

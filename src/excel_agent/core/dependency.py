@@ -484,7 +484,19 @@ class DependencyTracker:
 
         target_cells = _expand_range_to_cells(normalized)
 
-        # Find all dependents
+        # For very large ranges (sheet deletion), check each cell in the forward graph
+        # that belongs to the target sheet. We detect this when _expand_range_to_cells
+        # returns a single item that matches the normalized input exactly (meaning it
+        # couldn't expand a range like A1:XFD1048576 due to size limit)
+        if len(target_cells) == 1 and target_cells[0] == normalized:
+            # Check if the normalized ref is a range pattern (contains ":")
+            # and NOT a single cell
+            if ":" in ref:
+                # Range was too large to expand - check all cells in forward graph from this sheet
+                target_cells = [
+                    cell for cell in self._forward.keys() if cell.startswith(f"{sheet}!")
+                ]
+            # Otherwise it's a single cell, keep as-is
         all_dependents: set[str] = set()
         for cell in target_cells:
             all_dependents.update(self.find_dependents(cell))
