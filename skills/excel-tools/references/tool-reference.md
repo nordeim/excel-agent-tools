@@ -1,6 +1,30 @@
 # Excel Tools Complete Reference
 
-All 53 tools with full JSON examples.
+All 53 tools with full JSON examples. Updated for Phase 1 Remediation (April 11, 2026).
+
+## Phase 1 EditSession Pattern
+
+**NEW**: For mutations, tools now use `EditSession` instead of raw `ExcelAgent`:
+
+```python
+from excel_agent.core.edit_session import EditSession
+
+session = EditSession.prepare(input_path, output_path)
+with session:
+    wb = session.workbook
+    # Perform mutations
+    version_hash = session.version_hash  # Capture before exit
+# EditSession automatically saves ONCE (no double-save bug)
+```
+
+**Benefits**:
+- Automatic copy-on-write (if input != output)
+- Consistent `keep_vba=True` for macro preservation
+- Single save on exit (eliminates double-save bug)
+- Version hash capture before exit
+- File locking integration
+
+---
 
 ## Governance Tools (6)
 
@@ -17,10 +41,10 @@ xls-clone-workbook --input source.xlsx [--output-dir ./work/]
 {
   "status": "success",
   "data": {
-    "clone_path": "./work/source_20260409T143022_a3f7e2d1.xlsx",
+    "clone_path": "./work/source_20260411T143022_a3f7e2d1.xlsx",
     "source_hash": "sha256:abc...",
     "clone_hash": "sha256:abc...",
-    "timestamp": "20260409T143022"
+    "timestamp": "20260411T143022"
   }
 }
 ```
@@ -56,19 +80,22 @@ xls-validate-workbook --input workbook.xlsx
 
 **CLI**:
 ```bash
+export EXCEL_AGENT_SECRET="your-256-bit-secret"
 xls-approve-token --scope sheet:delete --file workbook.xlsx [--ttl 300]
 ```
 
 **Scopes**: `sheet:delete`, `sheet:rename`, `range:delete`, `formula:convert`, `macro:remove`, `macro:inject`, `structure:modify`
+
+**Important**: Set `EXCEL_AGENT_SECRET` environment variable before generating tokens. This ensures consistent secret across tool invocations (Phase 1 fix).
 
 **Output**:
 ```json
 {
   "status": "success",
   "data": {
-    "token": "eyJzY29wZSI6InNoZWV0OmRlbGV0ZSIs...",
+    "token": "sheet:delete|sha256:abc...|nonce...|timestamp|300|signature...",
     "scope": "sheet:delete",
-    "expires_at": "2026-04-09T14:35:00Z",
+    "expires_at": "2026-04-11T14:35:00Z",
     "file_hash": "sha256:abc..."
   }
 }
@@ -143,6 +170,8 @@ xls-dependency-report --input workbook.xlsx [--sheet Sheet1]
   }
 }
 ```
+
+**Phase 1 Fix**: Large ranges (e.g., full sheet) now properly expanded for impact analysis.
 
 ---
 
@@ -221,12 +250,12 @@ xls-get-workbook-metadata --input workbook.xlsx
 ### xls-get-defined-names
 **Purpose**: List all named ranges (global and sheet-scoped) with robust error handling.
 
-**CLI**: 
+**CLI**:
 ```bash
 xls-get-defined-names --input workbook.xlsx
 ```
 
-**Output**: 
+**Output**:
 ```json
 {
   "status": "success",
@@ -245,7 +274,7 @@ xls-get-defined-names --input workbook.xlsx
 - Handles workbooks with no named ranges (returns empty list)
 - Supports both workbook-level and sheet-level named ranges
 - Returns `hidden` and `is_reserved` status for each named range
-- Safe for use with all openpyxl versions
+- Safe for use with all openpyxl versions (Phase 16 fix)
 
 ---
 
@@ -322,7 +351,7 @@ xls-get-formula --input workbook.xlsx --cell A1 [--sheet Sheet1]
 
 ---
 
-## Write Tools (4)
+## Write Tools (4) - Uses EditSession
 
 ### xls-create-new
 **Purpose**: Create blank workbook.
@@ -368,7 +397,7 @@ xls-create-from-template --template template.xltx --output workbook.xlsx \
 ---
 
 ### xls-write-range
-**Purpose**: Write 2D array to range.
+**Purpose**: Write 2D array to range. Uses EditSession (Phase 1).
 
 **CLI**:
 ```bash
@@ -381,14 +410,17 @@ xls-write-range --input workbook.xlsx --output workbook.xlsx --range A1 \
 {
   "status": "success",
   "data": {"range_written": "A1:B2"},
-  "impact": {"cells_modified": 4}
+  "impact": {"cells_modified": 4},
+  "workbook_version": "sha256:abc..."
 }
 ```
+
+**Phase 1**: Uses EditSession - no explicit save needed
 
 ---
 
 ### xls-write-cell
-**Purpose**: Write single cell.
+**Purpose**: Write single cell. Uses EditSession (Phase 1).
 
 **CLI**:
 ```bash
@@ -403,16 +435,23 @@ xls-write-cell --input workbook.xlsx --output workbook.xlsx --cell A1 \
 {
   "status": "success",
   "data": {"cell": "A1", "type": "formula"},
-  "impact": {"cells_modified": 1}
+  "impact": {"cells_modified": 1},
+  "workbook_version": "sha256:abc..."
 }
 ```
 
+**Phase 1**: Uses EditSession - no explicit save needed
+
 ---
 
-## Structure Tools (8) - ⚠️ Token Required
+## Structure Tools (8) - ⚠️ Token Required - Uses EditSession
 
 ### xls-add-sheet
 **CLI**: `xls-add-sheet --input X --output X --name "New" [--position 0]`
+
+**Phase 1**: Uses EditSession - no explicit save needed
+
+---
 
 ### xls-delete-sheet ⚠️
 **Scope**: `sheet:delete`
@@ -422,56 +461,100 @@ xls-write-cell --input workbook.xlsx --output workbook.xlsx --cell A1 \
 ```json
 {
   "status": "denied",
-  "exit_code": 1,
+  "exit_code": 4,
   "guidance": "Run xls-update-references --updates '[...]' before retrying",
   "impact": {"broken_references": 7}
 }
 ```
 
+**Phase 1**: Uses EditSession, fixed audit log API, dependency tracker properly expands large ranges
+
+---
+
 ### xls-rename-sheet ⚠️
 **Scope**: `sheet:rename`
 **CLI**: `xls-rename-sheet --input X --output X --old "Old" --new "New" --token T`
 
+**Phase 1**: Uses EditSession, fixed audit log API
+
+---
+
 ### xls-insert-rows
 **CLI**: `xls-insert-rows --input X --output X --sheet S --before-row 5 --count 3`
+
+**Phase 1**: Uses EditSession - no explicit save needed
+
+---
 
 ### xls-delete-rows ⚠️
 **Scope**: `range:delete`
 **CLI**: `xls-delete-rows --input X --output X --sheet S --start-row 5 --count 3 --token T`
 
+**Phase 1**: Uses EditSession, fixed audit log API
+
+---
+
 ### xls-insert-columns
 **CLI**: `xls-insert-columns --input X --output X --sheet S --before-col C --count 2`
+
+**Phase 1**: Uses EditSession - no explicit save needed
+
+---
 
 ### xls-delete-columns ⚠️
 **Scope**: `range:delete`
 **CLI**: `xls-delete-columns --input X --output X --sheet S --start-col C --count 2 --token T`
 
-### xls-move-sheet
-**CLI**: `xls-move-sheet --input X --output X --name "Sheet" --position 0`
+**Phase 1**: Uses EditSession, fixed audit log API
 
 ---
 
-## Cells Tools (4)
+### xls-move-sheet
+**CLI**: `xls-move-sheet --input X --output X --name "Sheet" --position 0`
+
+**Phase 1**: Uses EditSession - no explicit save needed
+
+---
+
+## Cells Tools (4) - Uses EditSession
 
 ### xls-merge-cells
 **CLI**: `xls-merge-cells --input X --output X --range A1:C1`
 
+**Phase 1**: Uses EditSession
+
+---
+
 ### xls-unmerge-cells
 **CLI**: `xls-unmerge-cells --input X --output X --range A1:C1`
+
+**Phase 1**: Uses EditSession
+
+---
 
 ### xls-delete-range ⚠️
 **Scope**: `range:delete`
 **CLI**: `xls-delete-range --input X --output X --range A1:C5 --shift up|left --token T`
 
-### xls-update-references
-**CLI**: `xls-update-references --input X --output X --updates '[{"old": "...", "new": "..."}]'`
+**Phase 1**: Uses EditSession
 
 ---
 
-## Formulas Tools (6)
+### xls-update-references
+**CLI**: `xls-update-references --input X --output X --updates '[{"old": "...", "new": "..."}]'`
+
+**Phase 1**: Uses EditSession, fixed audit log API
+
+---
+
+## Formulas Tools (6) - Uses EditSession
 
 ### xls-set-formula
 **CLI**: `xls-set-formula --input X --output X --cell A1 --formula "=SUM(B1:B10)"`
+
+**Phase 1**: Uses EditSession
+
+---
 
 ### xls-recalculate
 **CLI**: `xls-recalculate --input X --output X [--tier 1|2]`
@@ -486,9 +569,14 @@ xls-write-cell --input workbook.xlsx --output workbook.xlsx --cell A1 \
     "error_count": 0,
     "engine": "tier1_formulas",
     "recalc_time_ms": 45.2
-  }
+  },
+  "workbook_version": "sha256:abc..."
 }
 ```
+
+**Phase 1 Fix**: Tier 1 calculator now preserves original sheet name casing after recalculation. Cross-sheet references work correctly.
+
+---
 
 ### xls-detect-errors
 **CLI**: `xls-detect-errors --input X [--sheet S]`
@@ -505,16 +593,22 @@ xls-write-cell --input workbook.xlsx --output workbook.xlsx --cell A1 \
 }
 ```
 
+---
+
 ### xls-convert-to-values ⚠️
 **Scope**: `formula:convert`
 **CLI**: `xls-convert-to-values --input X --output X --range A1:C10 --token T`
+
+**Phase 1**: Uses EditSession
+
+---
 
 ### xls-copy-formula-down
 
 **Purpose**: Copy formula from source cell down to target cells with reference adjustment.
 
-**CLI (Preferred API)**: `xls-copy-formula-down --input X --output X --source A1 --target A1:A10`  
-**CLI (Legacy API)**: `xls-copy-formula-down --input X --output X --cell A1 --count 10`  
+**CLI (Preferred API)**: `xls-copy-formula-down --input X --output X --source A1 --target A1:A10`
+**CLI (Legacy API)**: `xls-copy-formula-down --input X --output X --cell A1 --count 10`
 **Note**: `--source`/`--target` is preferred over `--cell`/`--count` (deprecated but still supported)
 
 **Output**:
@@ -546,43 +640,85 @@ xls-copy-formula-down --input data.xlsx --output data.xlsx --cell A1 --count 9
 xls-copy-formula-down --input data.xlsx --sheet Sales --source B2 --target B2:B20
 ```
 
-### xls-define-name
-**CLI**: `xls-define-name --input X --output X --name "SalesData" --refers-to "Sheet1!A1:B10"`
+**Phase 1 Fixes**:
+1. Fixed target count calculation (excluded source row)
+2. Fixed regex group indices in formula adjustment
 
 ---
 
-## Objects Tools (5)
+### xls-define-name
+**CLI**: `xls-define-name --input X --output X --name "SalesData" --refers-to "Sheet1!A1:B10"`
+
+**Phase 1**: Uses EditSession
+
+---
+
+## Objects Tools (5) - Uses EditSession
 
 ### xls-add-table
 **CLI**: `xls-add-table --input X --output X --range A1:D10 --name "Table1" [--has-totals]`
 
+**Phase 1**: Uses EditSession
+
+---
+
 ### xls-add-chart
 **CLI**: `xls-add-chart --input X --output X --type bar --data-range "A1:B10" --position "E1"`
+
+**Phase 1**: Uses EditSession
+
+---
 
 ### xls-add-image
 **CLI**: `xls-add-image --input X --output X --image logo.png --cell A1 [--width 200]`
 
+**Phase 1**: Uses EditSession
+
+---
+
 ### xls-add-comment
 **CLI**: `xls-add-comment --input X --output X --cell A1 --text "Review"`
+
+**Phase 1**: Uses EditSession
+
+---
 
 ### xls-set-data-validation
 **CLI**: `xls-set-data-validation --input X --output X --range A1:A10 --type list --source '["Yes", "No"]'`
 
+**Phase 1**: Uses EditSession
+
 ---
 
-## Formatting Tools (5)
+## Formatting Tools (5) - Uses EditSession
 
 ### xls-format-range
 **CLI**: `xls-format-range --input X --output X --range A1:C10 --spec '{"font": {"bold": true}}'`
 
+**Phase 1**: Uses EditSession
+
+---
+
 ### xls-set-column-width
 **CLI**: `xls-set-column-width --input X --output X --column A [--width 20|--auto-fit]`
+
+**Phase 1**: Uses EditSession
+
+---
 
 ### xls-freeze-panes
 **CLI**: `xls-freeze-panes --input X --output X --row 2 [--column C]`
 
+**Phase 1**: Uses EditSession
+
+---
+
 ### xls-apply-conditional-formatting
 **CLI**: `xls-apply-conditional-formatting --input X --output X --range A1:A100 --type colorscale --colors '["FF0000", "FFFF00", "00FF00"]'`
+
+**Phase 1**: Uses EditSession
+
+---
 
 ### xls-set-number-format
 **Purpose**: Apply number formats to cell ranges. **Important**: Format codes with `%` must be properly escaped.
@@ -610,7 +746,7 @@ xls-copy-formula-down --input data.xlsx --sheet Sales --source B2 --target B2:B2
 }
 ```
 
-**Note**: This tool was patched in Phase 16 to fix an argparse format specifier bug with `%` characters in help text.
+**Phase 1**: Uses EditSession
 
 ---
 
@@ -619,8 +755,12 @@ xls-copy-formula-down --input data.xlsx --sheet Sales --source B2 --target B2:B2
 ### xls-has-macros
 **CLI**: `xls-has-macros --input file.xlsm`
 
+---
+
 ### xls-inspect-macros
 **CLI**: `xls-inspect-macros --input file.xlsm`
+
+---
 
 ### xls-validate-macro-safety
 **CLI**: `xls-validate-macro-safety --input file.xlsm`
@@ -637,9 +777,13 @@ xls-copy-formula-down --input data.xlsx --sheet Sales --source B2 --target B2:B2
 }
 ```
 
+---
+
 ### xls-remove-macros ⚠️⚠️
 **Scope**: `macro:remove` × 2
 **CLI**: `xls-remove-macros --input file.xlsm --output file.xlsx --token T1 --token T2`
+
+---
 
 ### xls-inject-vba-project ⚠️
 **Scope**: `macro:inject`
@@ -690,11 +834,31 @@ xls-copy-formula-down --input data.xlsx --sheet Sales --source B2 --target B2:B2
 
 ---
 
-## Format Notes
+## Phase 1 Summary
 
-- **Dates**: Returned as ISO 8601 strings
-- **Numbers**: Returned as JSON numbers
-- **Formulas**: Returned as strings starting with `=`
-- **Null**: Returned as `null` in JSON
-- **Chunked**: Returns JSONL (one JSON per line)
-- **Large**: Use `--chunked` for >100k rows
+### Tools Migrated to EditSession (4 objects/formatting + 15 others)
+- All object tools (xls_add_table, xls_add_chart, xls_add_image, xls_add_comment, xls_set_data_validation)
+- All formatting tools (xls_format_range, xls_set_column_width, xls_freeze_panes, xls_apply_conditional_formatting, xls_set_number_format)
+- All structure tools
+- All cells tools
+- All formulas tools
+- All write tools
+
+### Tools Fixed
+- `xls_delete_sheet.py` - Audit log API + dependency tracker
+- `xls_delete_rows.py` - Audit log API
+- `xls_delete_columns.py` - Audit log API
+- `xls_rename_sheet.py` - Audit log API
+- `xls_update_references.py` - Audit log API
+- `xls_copy_formula_down.py` - Count calculation + regex
+- `tier1_engine.py` - Sheet casing preservation
+
+### Critical Requirements
+1. **Set EXCEL_AGENT_SECRET** for token operations
+2. **Use EditSession** for mutations (eliminates double-save)
+3. **Check exit codes** before parsing JSON
+4. **Use --outfile** not --output for export tools
+
+---
+
+**Document Version**: Phase 1 Remediation (April 11, 2026)
