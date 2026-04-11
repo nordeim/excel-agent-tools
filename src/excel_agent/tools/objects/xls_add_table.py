@@ -223,8 +223,9 @@ def _run() -> dict[str, object]:
         # Add table to worksheet
         ws.add_table(table)
 
-        # Capture version hash before exiting context
+        # Capture hashes before exiting context
         version_hash = session.version_hash
+        file_hash = session.file_hash
 
         # EditSession handles save automatically on exit
 
@@ -234,7 +235,7 @@ def _run() -> dict[str, object]:
         tool="xls_add_table",
         scope="structure:modify",
         target_file=input_path,
-        file_version_hash=session.file_hash,
+        file_version_hash=file_hash,
         actor_nonce="auto",
         operation_details={
             "table_name": args.name,

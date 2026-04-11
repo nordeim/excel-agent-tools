@@ -40,7 +40,7 @@ def _run() -> dict:
             "Generate one with: xls-approve-token --scope sheet:rename --file <path>"
         )
     mgr = ApprovalTokenManager()
-    mgr.validate_token(args.token, expected_scope="sheet:rename", expected_file_hash=file_hash)
+    mgr.validate_token(args.token, "sheet:rename", input_path)
 
     session = EditSession.prepare(input_path, output_path)
     with session:

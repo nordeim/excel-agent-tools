@@ -48,7 +48,7 @@ def _run() -> dict:
     if not args.token:
         raise ValidationError("Approval token required for column deletion.")
     mgr = ApprovalTokenManager()
-    mgr.validate_token(args.token, expected_scope="range:delete", expected_file_hash=file_hash)
+    mgr.validate_token(args.token, "range:delete", input_path)
 
     start_col = _parse_column(args.start_column)
 
@@ -79,8 +79,9 @@ def _run() -> dict:
         ws.delete_cols(idx=start_col, amount=args.count)
         formulas_updated = adjust_col_references(wb, sheet_name, start_col, -args.count)
 
-        # Capture version hash before exiting context
+        # Capture hashes before exiting context
         version_hash = session.version_hash
+        file_hash = session.file_hash
 
         # EditSession handles save automatically on exit
 
@@ -92,7 +93,7 @@ def _run() -> dict:
         action="delete",
         outcome="success",
         token_used=True,
-        file_hash=session.file_hash,
+        file_hash=file_hash,
     )
 
     return build_response(

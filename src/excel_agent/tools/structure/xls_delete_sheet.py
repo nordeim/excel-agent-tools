@@ -42,7 +42,7 @@ def _run() -> dict:
         )
 
     mgr = ApprovalTokenManager()
-    mgr.validate_token(args.token, expected_scope="sheet:delete", expected_file_hash=file_hash)
+    mgr.validate_token(args.token, "sheet:delete", input_path)
 
     session = EditSession.prepare(input_path, output_path)
     with session:

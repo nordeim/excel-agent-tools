@@ -141,7 +141,9 @@ def _run() -> dict[str, object]:
 
     input_path = validate_input_path(args.input)
     output_path = validate_output_path(
-        args.outfile or str(input_path.with_suffix(".json")), create_parents=True
+        args.outfile or str(input_path.with_suffix(".json")),
+        create_parents=True,
+        allowed_suffixes={".json"},
     )
 
     file_hash = compute_file_hash(input_path)
@@ -216,7 +218,9 @@ def _run() -> dict[str, object]:
         record_count = (
             len(data)
             if isinstance(data, list)
-            else sum(len(v) for v in data.values()) if isinstance(data, dict) else 0
+            else sum(len(v) for v in data.values())
+            if isinstance(data, dict)
+            else 0
         )
 
     except Exception as e:

@@ -46,40 +46,15 @@ def _run() -> dict:
             "Generate one with: xls-approve-token --scope range:delete --file <path>"
         )
     mgr = ApprovalTokenManager()
-    mgr.validate_token(args.token, expected_scope="range:delete", expected_file_hash=file_hash)
-
-    # Use EditSession for proper copy-on-write and save semantics
-    session = EditSession.prepare(input_path, output_path)
-
-    with session:
-        wb = session.workbook
-        sheet_name = args.sheet or wb.sheetnames[0]
-        ws = wb[sheet_name]
-        end_row = args.start_row + args.count - 1
-
-        # Pre-flight dependency check
-        tracker = DependencyTracker(wb)
-        tracker.build_graph()
-        target = f"{sheet_name}!A{args.start_row}:XFD{end_row}"
-        report = tracker.impact_report(target, action="delete")
-
-        if report.broken_references > 0 and not args.acknowledge_impact:
-            raise ImpactDeniedError(
-                f"Deleting rows {args.start_row}-{end_row} in {sheet_name!r} would break "
-                f"{report.broken_references} formula reference(s)",
-                impact_report=report.to_dict(),
-                guidance=(
-                    "Run xls-update-references to fix references first, or re-run with "
-                    "--acknowledge-impact to proceed."
-                ),
-            )
+    mgr.validate_token(args.token, "range:delete", input_path)
 
         ws.delete_rows(idx=args.start_row, amount=args.count)
 
         formulas_updated = adjust_row_references(wb, sheet_name, args.start_row, -args.count)
 
-        # Capture version hash before exiting context
+        # Capture hashes before exiting context
         version_hash = session.version_hash
+        file_hash = session.file_hash
 
         # EditSession handles save automatically on exit
 
@@ -91,7 +66,7 @@ def _run() -> dict:
         action="delete",
         outcome="success",
         token_used=True,
-        file_hash=session.file_hash,
+        file_hash=file_hash,
     )
 
     return build_response(

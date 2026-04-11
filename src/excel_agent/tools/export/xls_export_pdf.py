@@ -90,7 +90,9 @@ def _run() -> dict[str, object]:
 
     input_path = validate_input_path(args.input)
     output_path = validate_output_path(
-        args.outfile or str(input_path.with_suffix(".pdf")), create_parents=True
+        args.outfile or str(input_path.with_suffix(".pdf")),
+        create_parents=True,
+        allowed_suffixes={".pdf"},
     )
 
     # Validate timeout
