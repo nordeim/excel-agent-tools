@@ -1,6 +1,49 @@
 # Excel Tools Troubleshooting Guide
 
-Common issues and solutions. Updated for Phase 1 Remediation (April 11, 2026).
+Common issues and solutions. Updated for Phase 2 Validation (April 12, 2026).
+
+---
+
+## Phase 2: Code Review Validation Findings
+
+### Finding: coerce_from_cell timedelta precision (NON-ISSUE)
+
+**Reported:** Code review flagged `coerce_from_cell` function for converting timedelta to string.
+
+**Status:** ⚠️ **Function never existed in codebase**
+
+**Actual Implementation**: READ path uses `chunked_io._serialize_cell_value()`:
+
+```python
+# src/excel_agent/core/chunked_io.py:36-37
+def _serialize_cell_value(value: object) -> Any:
+    if isinstance(value, datetime.timedelta):
+        return value.total_seconds()  # ✅ Correct: preserves precision as float
+```
+
+**Conclusion**: No fix needed. READ path already correctly serializes timedelta.
+
+---
+
+### Finding: run_tool statelessness (BY DESIGN)
+
+**Reported:** `run_tool` creates new `AgentClient` on each call.
+
+**Status**: ⚠️ **Intentional design**
+
+**Explanation**: `run_tool` is a stateless convenience function for quick, single-shot operations.
+
+**Usage Patterns**:
+```python
+# Stateless (no token):
+result = run_tool("read.xls_read_range", input="file.xlsx", range="A1:C10")
+
+# Stateful (token generation + usage):
+client = AgentClient(secret_key=os.environ["EXCEL_AGENT_SECRET"])
+token = client.generate_token("sheet:delete", "file.xlsx")
+result = client.run("structure.xls_delete_sheet", input="file.xlsx", 
+                    name="Old", token=token)
+```
 
 ---
 
@@ -474,5 +517,28 @@ fi
 
 ---
 
-**Document Version**: Phase 1 Remediation (April 11, 2026)
-**Phase 1 Status**: All critical issues resolved, 554/554 tests passing
+## Phase 2 Validation Status
+
+**Date**: April 12, 2026  
+**Objective**: Validate CODE_REVIEW_REPORT.md issues
+
+### Results Summary
+
+| Issue | Status |
+|:------|:-------|
+| Permission test (root) | ✅ Fixed |
+| soffice FileNotFoundError | ✅ Fixed |
+| Random token secret | ✅ Fixed |
+| Duplicate ImpactDeniedError | ✅ Fixed |
+| ZipFile resource leak | ✅ Fixed |
+| coerce_from_cell timedelta | ⚠️ Never existed (no issue) |
+| Double workbook load | ✅ Already fixed |
+| Circular refs in suggestions | ✅ Already fixed |
+| run_tool new client | ⚠️ By design |
+
+**Overall**: All critical and major issues resolved. No action required.
+
+---
+
+**Document Version**: Phase 2 Validation (April 12, 2026)
+**Status**: All critical issues resolved, 554/554 tests passing

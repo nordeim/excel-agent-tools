@@ -5,11 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2026-04-10
+## [1.0.1] - 2026-04-12
 
-### Added
+### Phase 2: Code Review Validation & Documentation
 
-#### Phase 15: E2E QA Execution & Production Certification
+**Objective:** Validate all issues from CODE_REVIEW_REPORT.md against current codebase.
+
+#### Validated Issues
+- ✅ Permission test (root) - Fixed with `pytest.skip()`
+- ✅ soffice FileNotFoundError - Fixed with `shutil.which()` guard
+- ✅ Random token secret - Fixed to raise `ValueError`
+- ✅ Duplicate ImpactDeniedError - Unified exception class
+- ✅ ZipFile resource leak - Fixed with `try/finally`
+- ⚠️ coerce_from_cell timedelta - Function never existed (READ path already correct)
+- ✅ Double workbook load - Already fixed via EditSession
+- ✅ Circular refs in suggestions - Already fixed
+- ⚠️ run_tool new client - By design (stateless convenience)
+
+#### Documentation Updates
+- Enhanced `CODE_REVIEW_REPORT.md` with Phase 5 validation section
+- Updated `sdk/client.py` with stateless design documentation
+- Created comprehensive `ACCOMPLISHMENTS.md`
+- Updated all skill documentation files
+
+#### Test Results
+- 554/554 tests passing (100%)
+- All critical and major issues confirmed resolved
+
+---
+
+## [1.0.0] - 2026-04-11
+
+### Phase 1: Unified "Edit Target" Semantics Remediation
+
+#### Critical Fixes (18 tools)
+- **Double-save bug eliminated** - Removed explicit `wb.save()` calls from 18 tools
+- **EditSession abstraction** - New unified context manager for safe mutations
+- **Raw load_workbook migration** - 4+ tools migrated to EditSession
+- **Enhanced validate_output_path()** - Extension validation, overwrite checks
+
+#### Security & Governance
+- **Token Manager fix** - Now reads `EXCEL_AGENT_SECRET` from environment
+- **Audit log API fix** - Updated 5 tools to use correct `audit.log()` method
+
+#### Core Engine Fixes
+- **Tier 1 Formula Engine** - Fixed sheet name casing loss after recalculation
+- **Dependency Tracker** - Fixed full sheet deletion impact reports
+- **Tool base status** - Returns "denied" for exit code 4
+
+#### Test Results
+- 554/554 tests passing (100%)
+- New EditSession tests: 28 passing
+- New validation tests: 23 passing
+
+---
+
+## [1.0.0-rc2] - 2026-04-10
+
+### Phase 15: E2E QA Execution & Production Certification
 
 - **E2E QA Test Plan Execution** (`E2E_QA_TEST_REPORT.md`)
   - 430 total tests executed (347 unit + 83 integration)
