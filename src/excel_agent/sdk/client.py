@@ -381,12 +381,35 @@ class AgentClient:
 def run_tool(tool: str, **kwargs: Any) -> dict[str, Any]:
     """Execute a tool with default settings (no retries, no secret).
 
+    This is a STATELESS convenience function for quick, single-shot tool execution.
+    It creates a new AgentClient on each call. For stateful operations
+    (e.g., token generation followed by usage), create and reuse an AgentClient:
+
+    Examples:
+        # Stateless quick usage (no token required):
+        >>> result = run_tool("read.xls_read_range", input="file.xlsx", range="A1:C10")
+        >>> print(result["data"]["values"])
+
+        # Stateful operations (token generation + usage):
+        >>> import os
+        >>> client = AgentClient(secret_key=os.environ["EXCEL_AGENT_SECRET"])
+        >>> token = client.generate_token("sheet:delete", "file.xlsx")
+        >>> result = client.run("structure.xls_delete_sheet",
+        ...                     input="file.xlsx",
+        ...                     name="OldSheet",
+        ...                     token=token)
+
     Args:
-        tool: Tool module path.
-        **kwargs: Tool arguments.
+        tool: Tool module path (e.g., "read.xls_read_range").
+        **kwargs: Tool arguments passed as keyword args.
 
     Returns:
-        Parsed JSON response.
+        Parsed JSON response from the tool.
+
+    Note:
+        Since each call creates a new AgentClient, this function cannot
+        maintain state across calls. Use AgentClient directly for
+        multi-step workflows requiring token generation and usage.
     """
     client = AgentClient()
     return client.run(tool, max_retries=1, **kwargs)
